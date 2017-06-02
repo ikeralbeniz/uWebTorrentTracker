@@ -20,7 +20,7 @@
     "minimist": "^1.1.1",
     "random-iterate": "^1.0.1",
     "run-series": "^1.0.2",
-    "safe-buffer": "^5.0.0",
+    "safe-buffer": "5.0.1",
     "simple-get": "^2.6.0",
     "unordered-array-remove": "^1.0.2",
     "uws": "^0.14.5"
