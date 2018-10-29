@@ -3,6 +3,7 @@ const debug = require('debug')('uwt')
 const EventEmitter = require('events').EventEmitter
 const fs = require('fs')
 const http = require('http')
+const express = require('express')
 const peerid = require('bittorrent-peerid')
 const series = require('run-series')
 const WebSocketServer = require('uws').Server
@@ -49,7 +50,8 @@ class Server extends EventEmitter {
     this.destroyed = false
     this.torrents = {}
 
-    this.http = http.createServer()
+    this.app = express();
+    this.http = http.createServer(this.app)
     this.http.on('error', err => { this._onError(err) })
     this.http.on('listening', () => {
       this.listening = true
@@ -60,13 +62,14 @@ class Server extends EventEmitter {
     // Add default http request handler on next tick to give user the chance to add
     // their own handler first. Handle requests untouched by user's handler.
     process.nextTick(() => {
-      this.http.on('request', (req, res) => {
+
+      this.app.use(function(req, res){
         if (res.headersSent) return
         // For websocket trackers, we only need to handle the UPGRADE http method.
         // Return 404 for all other request types.
         res.statusCode = 404
         res.end('404 Not Found')
-      })
+      });
     })
 
     this.ws = new WebSocketServer({ server: this.http })
@@ -78,32 +81,6 @@ class Server extends EventEmitter {
       this.statsHistory = [[], [], [], [], [], [], []]
 
       this.readStatsHistory()
-
-      // Http handler for '/stats' route
-      this.http.on('request', (req, res) => {
-        if (res.headersSent) return
-
-        if (req.method === 'GET' && (req.url === '/stats' || req.url === '/stats.json')) {
-          const stats = this.getStats()
-
-          if (req.url === '/stats.json' || req.headers['accept'] === 'application/json') {
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify(stats))
-          } else if (req.url === '/stats') {
-            res.end('<h1>' + stats.torrents + ' active torrents</h1>\n' +
-              '<h2>Connected Peers: ' + stats.peersAll + '</h2>\n' +
-              '<h3>Peers Seeding Only: ' + stats.peersSeederOnly + '</h3>\n' +
-              '<h3>Peers Leeching Only: ' + stats.peersLeecherOnly + '</h3>\n' +
-              '<h3>Peers Seeding & Leeching: ' + stats.peersSeederAndLeecher + '</h3>\n' +
-              '<h3>IPv4 Peers: ' + stats.peersIPv4 + '</h3>\n' +
-              '<h3>IPv6 Peers: ' + stats.peersIPv6 + '</h3>\n' +
-              '<h3>Clients:</h3>\n' +
-              printClients(stats.clients) +
-              '<small>Running <a href="https://www.npmjs.com/package/uwt">' + NAME + '</a> v' + VERSION + '</small>'
-            )
-          }
-        }
-      })
 
       setTimeout(() => { // Start recording stats after 2 minutes (90 seconds timeout + 30 seconds interval)
         setInterval(() => {
@@ -130,15 +107,21 @@ class Server extends EventEmitter {
 
     const port = toNumber(arguments[0]) || arguments[0] || 0
 
-    debug('listen (port: %o)', port)
 
     const isObject = obj => {
       return typeof obj === 'object' && obj !== null
     }
 
+    var address = '127.0.0.1' 
+    if (typeof arguments[1] !== 'function') {
+      address = isObject(arguments[1]) ? arguments[1].address : arguments[1] 
+    }
+
+    debug('listen (port: %o)', port)
+
     const httpPort = isObject(port) ? (port.http || 0) : port
 
-    if (this.http) this.http.listen(httpPort)
+    if (this.http) this.http.listen(httpPort, address)
   }
 
   close (cb) {
